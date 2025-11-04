@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Data
+*.xlsx
+who_ambient_air_quality_database_version_2024_(v6.1).xlsx
+
+# Output Files
+AirPollutionMap2020.jpg
+colorsBar.png
+physical-earth-map-geographic-grid-lines.png
