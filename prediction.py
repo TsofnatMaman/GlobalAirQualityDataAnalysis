@@ -1,10 +1,7 @@
-import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
-# שימו לב: אין יותר צורך ב-Pipeline או PolynomialFeatures
 import numpy as np
 
-# ייבוא הנתונים והפונקציות המשותפות מהמודול שלנו
 from data_loader import pf, pollution, get_processed_country_data
 from exceptions import CountryNotFoundException
 
@@ -24,8 +21,6 @@ def _perform_prediction_and_plot(data, target_year, title):
         # 1. הכנת נתונים לאימון
         X = data.index.values.reshape(-1, 1)
         y = data[p].values
-
-        # --- 🟢 שינוי מרכזי: מעבר למודל לוג-ליניארי ---
 
         # 1א. סינון נתונים: אפשר להשתמש רק בערכי y > 0
         positive_mask = y > 0
@@ -70,9 +65,6 @@ def _perform_prediction_and_plot(data, target_year, title):
         all_plot_values.append(predicted_value)
 
         print(f"Predicted {p} for {target_year}: {predicted_value:.2f}")
-        # אין יותר צורך בהערה על "clamping", כי זה לא יקרה
-
-        # --- ------------------------------------ ---
 
         # 4. הצגה ויזואלית
         line = plt.plot(X, y, marker='o', linestyle='-', label=f"Historical {p}")
