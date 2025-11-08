@@ -1,7 +1,8 @@
+import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.pipeline import Pipeline
+# שימו לב: אין יותר צורך ב-Pipeline או PolynomialFeatures
+import numpy as np
 
 # ייבוא הנתונים והפונקציות המשותפות מהמודול שלנו
 from data_loader import pf, pollution, get_processed_country_data
@@ -11,7 +12,7 @@ from exceptions import CountryNotFoundException
 def _perform_prediction_and_plot(data, target_year, title):
     """
     פונקציית עזר פנימית לביצוע החיזוי והשרטוט.
-    זוהי הלוגיקה המשותפת שחולצה מ-f5 ו-f6.
+    משתמשת במודל לוג-ליניארי (y = e^(ax+b))
     """
 
     predictions = {}
@@ -24,68 +25,71 @@ def _perform_prediction_and_plot(data, target_year, title):
         X = data.index.values.reshape(-1, 1)
         y = data[p].values
 
-        if len(X) < 2:
-            print(f"Skipping {p}: Not enough data points to train model.")
+        # --- 🟢 שינוי מרכזי: מעבר למודל לוג-ליניארי ---
+
+        # 1א. סינון נתונים: אפשר להשתמש רק בערכי y > 0
+        positive_mask = y > 0
+        if np.sum(positive_mask) < 2:  # אין מספיק נתונים חיוביים לאמן
+            print(f"Skipping {p}: Not enough positive data points for Log-Linear model.")
             continue
 
-        # שימוש במודל היציב (דרגה 2)
-        degree = 2
-        model = Pipeline([
-            ('poly', PolynomialFeatures(degree=degree)),
-            ('linear', LinearRegression())
-        ])
+        X_train = X[positive_mask]
+        y_train = y[positive_mask]
 
-        model.fit(X, y)
+        # 1ב. המרת y ל- log(y)
+        y_log_train = np.log(y_train)
+
+        # 1ג. יצירת מודל ליניארי פשוט
+        model = LinearRegression()
+
+        # 1ד. אימון המודל על log(y)
+        model.fit(X_train, y_log_train)
 
         # 2. הדפסת תוצאות
-        r2_score = model.score(X, y)
-        print(f"  Training results for {p} (Polynomial Degree {degree}):")
-        print(f"    Model Fit (R²): {r2_score:.3f}")
+        # ציון ה-R² מחושב על ההתאמה ל-log(y), לא ל-y
+        r2_score = model.score(X_train, y_log_train)
+        print(f"  Training results for {p} (Log-Linear Model):")
+        print(f"    Model Fit (R² on log(y)): {r2_score:.3f}")
 
         # 3. חיזוי
-        y_pred_historical = model.predict(X)
 
-        # --- 🟢 שינוי: הוספת "היגיון פיזיקלי" ---
+        # 3א. חישוב עקומת החיזוי ההיסטורית (במרחב הלוגריתמי)
+        y_log_curve_pred = model.predict(X)
+        # 3ב. המרה של העקומה בחזרה למרחב הרגיל (אקספוננט)
+        y_curve_pred = np.exp(y_log_curve_pred)
 
-        # 3א. חישוב התחזית "הגולמית" של המודל
-        raw_predicted_value = model.predict([[target_year]])[0]
+        # 3ג. חיזוי הערך העתידי (במרחב הלוגריתמי)
+        predicted_log_value = model.predict([[target_year]])[0]
+        # 3ד. המרה בחזרה - התוצאה תמיד תהיה חיובית
+        predicted_value = np.exp(predicted_log_value)
 
-        # 3ב. "כפייה" של ערך 0 כרצפה פיזיקלית
-        # הערך שיוצג בגרף יהיה 0 אם התחזית שלילית
-        plotted_value = max(0, raw_predicted_value)
-
-        predictions[p] = plotted_value
+        predictions[p] = predicted_value
 
         all_plot_values.extend(y)
-        all_plot_values.extend(y_pred_historical)
-        all_plot_values.append(plotted_value)  # הוספת הערך הכפוי לרשימה
+        all_plot_values.extend(y_curve_pred)
+        all_plot_values.append(predicted_value)
 
-        # 3ג. הדפסת התוצאה עם הערה
-        print(f"Predicted {p} for {target_year}: {raw_predicted_value:.2f}")
-        if raw_predicted_value < 0:
-            print(f"    (Prediction clamped to 0.0 for physical realism)")
+        print(f"Predicted {p} for {target_year}: {predicted_value:.2f}")
+        # אין יותר צורך בהערה על "clamping", כי זה לא יקרה
+
         # --- ------------------------------------ ---
 
         # 4. הצגה ויזואלית
         line = plt.plot(X, y, marker='o', linestyle='-', label=f"Historical {p}")
         line_color = line[0].get_color()
-        plt.plot(X, y_pred_historical, color='gray', linestyle='--', label=f'Regression Curve (Fit, D={degree})')
+        # שרטוט העקומה האקספוננציאלית
+        plt.plot(X, y_curve_pred, color='gray', linestyle='--', label='Log-Linear Curve (Fit)')
 
-        # שרטוט ה-X בערך ה"כפוי" (0 או הערך החיובי)
-        plt.plot([target_year], [plotted_value], marker='X', color=line_color, markersize=10, linestyle='None',
-                 label=f"Predicted {p} ({plotted_value:.2f})")  # עדכון הליבל לערך הסופי
+        # שרטוט ה-X (תמיד יהיה חיובי)
+        plt.plot([target_year], [predicted_value], marker='X', color=line_color, markersize=10, linestyle='None',
+                 label=f"Predicted {p} ({predicted_value:.2f})")
 
     # 5. הגדרות גרף סופיות
     plt.axhline(0, color='red', linestyle='--', linewidth=1, label='Physical Zero')
 
     current_ymin, current_ymax = plt.ylim()
-    min_val = min(all_plot_values) if all_plot_values else 0
-
-    # עדכנו את הלוגיקה כאן כדי לוודא שהציר התחתון הוא 0 או פחות
-    new_ymin = min(current_ymin, min_val * 1.1)
-    new_ymin = min(new_ymin, 0)  # ודא שציר 0 תמיד כלול
-
-    plt.ylim(bottom=new_ymin - 1, top=(current_ymax * 1.1) + 1)  # -1 קטן כדי למנוע חיתוך
+    # ציר ה-Y תמיד יתחיל ב-0 או נמוך יותר
+    plt.ylim(bottom=min(current_ymin, 0), top=(current_ymax * 1.1) + 1)
 
     plt.legend()
     plt.xlabel("Year")
@@ -99,7 +103,7 @@ def f5_predict_global_pollution(target_year=None):
     """
     פונקציית Wrapper: מכינה נתונים גלובליים וקוראת לפונקציית החיזוי.
     """
-    print("\n--- Global Pollution Prediction (Polynomial Degree 2) ---")
+    print("\n--- Global Pollution Prediction (Log-Linear Model) ---")
 
     # 1. הכנת נתונים
     global_pollution = pf.groupby("year")[pollution].mean().dropna()
@@ -113,14 +117,14 @@ def f5_predict_global_pollution(target_year=None):
 
     # 3. קריאה לפונקציה המשותפת
     _perform_prediction_and_plot(global_pollution, target_year,
-                                 f"Global Pollution Prediction (Polynomial D=2) for {target_year}")
+                                 f"Global Pollution Prediction (Log-Linear) for {target_year}")
 
 
 def f6_predict_country_pollution(country, city="all", target_year=None):
     """
     פונקציית Wrapper: מכינה נתונים למדינה וקוראת לפונקציית החיזוי.
     """
-    print(f"\n--- Country Pollution Prediction (Polynomial Degree 2) for: {country} ({city}) ---")
+    print(f"\n--- Country Pollution Prediction (Log-Linear Model) for: {country} ({city}) ---")
 
     # 1. קבלת נתונים מעובדים
     country_pollution = get_processed_country_data(country, city)
@@ -138,7 +142,7 @@ def f6_predict_country_pollution(country, city="all", target_year=None):
 
     # 3. קריאה לפונקציה המשותפת
     _perform_prediction_and_plot(country_pollution, target_year,
-                                 f"Prediction for {country} - {city} (Polynomial D=2) for {target_year}")
+                                 f"Prediction for {country} - {city} (Log-Linear) for {target_year}")
 
 
 if __name__ == "__main__":
@@ -151,7 +155,6 @@ if __name__ == "__main__":
     try:
         f6_predict_country_pollution("Israel", "tel aviv")
         f6_predict_country_pollution("Germany", target_year=2030)
-        f6_predict_country_pollution("India", target_year=2035)
 
     except CountryNotFoundException as e:
         print(e)
