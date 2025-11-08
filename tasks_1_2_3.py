@@ -1,12 +1,9 @@
-import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-
 from exceptions import CountryNotFoundException
+from data_loader import pf, pollution, get_processed_country_data
 
-pf = pd.read_excel("who_ambient_air_quality_database_version_2024_(v6.1).xlsx", sheet_name="Update 2024 (V6.1)")
-pollution=["pm10_concentration", "pm25_concentration", "no2_concentration"]
 
 # ------------------------------- a -------------------------------
 def data_viewer():
@@ -44,19 +41,15 @@ def f1():
 
 # 2 - show trend of air quality mean in specify country - average of all infections
 def f2(country, city="all"):
+    avg_by_year_in_specify_country = get_processed_country_data(country, city)
 
-    avg_by_year_in_specify_country = (pf[pf["country_name"].str.lower() == country.lower()])
     if avg_by_year_in_specify_country.empty:
-        raise CountryNotFoundException(country)
+        print(f"No data to plot for {country} ({city}).")
+        return
 
-    if city != "all":
-        avg_by_year_in_specify_country = avg_by_year_in_specify_country[avg_by_year_in_specify_country["city"].str.lower().str.contains(city.lower())]
-
-    avg_by_year_in_specify_country =  avg_by_year_in_specify_country.groupby("year")[pollution].mean()
     avg_pollution = avg_by_year_in_specify_country.mean(axis=1)
 
     plt.figure()
-
     plt.plot(avg_pollution.index, avg_pollution.values, marker="o")
 
     plt.xlabel("Year")
